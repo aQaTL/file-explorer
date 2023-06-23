@@ -8,10 +8,10 @@ use windows::{
 		Graphics::Gdi::{BeginPaint, EndPaint, PatBlt, BLACKNESS, HBRUSH, PAINTSTRUCT, WHITENESS},
 		System::LibraryLoader::GetModuleHandleW,
 		UI::WindowsAndMessaging::{
-			CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
-			TranslateMessage, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CW_USEDEFAULT, HCURSOR, HICON,
-			HMENU, MSG, WINDOW_EX_STYLE, WM_ACTIVATEAPP, WM_CLOSE, WM_DESTROY, WM_PAINT, WM_SIZE,
-			WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+			CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
+			RegisterClassW, TranslateMessage, CS_HREDRAW, CS_OWNDC, CS_VREDRAW, CW_USEDEFAULT,
+			HCURSOR, HICON, HMENU, MSG, WINDOW_EX_STYLE, WM_ACTIVATEAPP, WM_CLOSE, WM_DESTROY,
+			WM_PAINT, WM_SIZE, WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 		},
 	},
 };
@@ -76,28 +76,26 @@ impl Window {
 				return Err(io::Error::last_os_error());
 			}
 
-			return Ok(Window {
+			Ok(Window {
 				hwnd,
 				classname,
 				window_title,
-			});
+			})
 		}
 	}
 
 	pub fn get_message(&mut self) -> ControlFlow<io::Result<()>> {
 		unsafe {
-			debug!("Get message");
-
 			let mut msg = MaybeUninit::<MSG>::uninit();
 			match GetMessageW(msg.as_mut_ptr(), HWND::default(), 0, 0).0 {
 				-1 => return ControlFlow::Break(Err(io::Error::last_os_error())),
 				0 => return ControlFlow::Break(Ok(())),
 				_ => (),
 			}
-			let mut msg = msg.assume_init();
+			let msg = msg.assume_init();
 
-			TranslateMessage(&mut msg);
-			DispatchMessageW(&mut msg);
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
 
 			ControlFlow::Continue(())
 		}
@@ -114,16 +112,17 @@ unsafe extern "system" fn main_window_callback(
 
 	match message {
 		WM_SIZE => {
-			println!("WM_SIZE");
+			debug!("WM_SIZE");
 		}
 		WM_DESTROY => {
-			println!("WM_DESTROY");
+			debug!("WM_DESTROY");
 		}
 		WM_CLOSE => {
-			println!("WM_CLOSE");
+			debug!("Close requested");
+			PostQuitMessage(0);
 		}
 		WM_ACTIVATEAPP => {
-			println!("WM_ACTIVATEAPP");
+			debug!("WM_ACTIVATEAPP");
 		}
 		WM_PAINT => unsafe {
 			let mut paint = MaybeUninit::<PAINTSTRUCT>::uninit();
@@ -132,7 +131,7 @@ unsafe extern "system" fn main_window_callback(
 				error!("Invalid DeviceContext: {}", io::Error::last_os_error());
 				return LRESULT(callback_result);
 			}
-			let mut paint = paint.assume_init();
+			let paint = paint.assume_init();
 
 			let x = paint.rcPaint.left;
 			let y = paint.rcPaint.top;
@@ -157,10 +156,9 @@ unsafe extern "system" fn main_window_callback(
 				return LRESULT(callback_result);
 			}
 
-			EndPaint(window, &mut paint);
+			EndPaint(window, &paint);
 		},
 		_ => {
-			println!("default");
 			callback_result = DefWindowProcW(window, message, w_param, l_param).0;
 		}
 	}
