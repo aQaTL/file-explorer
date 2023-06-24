@@ -3,10 +3,13 @@ name = "file-explorer"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+windows_subsystem = []
+
 [dependencies]
 aqa_logger = { git = "https://github.com/aqatl/aqa_logger", version = "0.1.1" }
 log = "0.4.19"
-
 
 [dependencies.windows]
 version = "0.48.0" 
@@ -14,5 +17,7 @@ features = [
 	"Win32_UI_WindowsAndMessaging",
 	"Win32_Foundation",
 	"Win32_Graphics_Gdi",
-	"Win32_System_LibraryLoader"
+	"Win32_System_LibraryLoader",
+	"Win32_System_Memory",
+	"Win32_UI_Input_KeyboardAndMouse"
 ]
