@@ -44,15 +44,44 @@ pub struct Window {
 	bitmap_data: Box<BitmapData>,
 }
 
+#[derive(Copy, Clone)]
+struct BitmapData {
+	bitmap_memory: *mut std::os::raw::c_void,
+	bitmap_memory_size: usize,
+	bitmap_info: BITMAPINFO,
+	bitmap_width: i32,
+	bitmap_height: i32,
+	player_x: usize,
+	player_y: usize,
+	player_width: usize,
+	player_height: usize,
+}
+
+impl Default for BitmapData {
+	fn default() -> Self {
+		unsafe { mem::transmute([0_u8; mem::size_of::<BitmapData>()]) }
+	}
+}
+
+unsafe impl Sync for BitmapData {}
+
 impl Window {
 	pub fn open() -> io::Result<Self> {
 		unsafe {
 			debug!("Create window");
 
+			let mut bitmap_data = Box::new(BitmapData {
+				player_width: 50,
+				player_height: 500,
+				..Default::default()
+			});
+			if let Err(err) = resize_dib_section(&mut bitmap_data, 1280, 720) {
+				error!("resize_dib_section: {err}");
+			}
+
 			let h_instance = GetModuleHandleW(PCWSTR::null())?;
 
 			let classname = "FileExplorerWindowClass".to_utf16_with_null();
-
 			let wndclass = WNDCLASSW {
 				style: CS_HREDRAW | CS_VREDRAW,
 				lpfnWndProc: Some(main_window_callback),
@@ -71,12 +100,6 @@ impl Window {
 				return Err(io::Error::last_os_error());
 			}
 			debug!("Class registered");
-
-			let bitmap_data = Box::new(BitmapData {
-				player_width: 50,
-				player_height: 500,
-				..Default::default()
-			});
 
 			let window_title = "File Explorer".to_utf16_with_null();
 
@@ -141,29 +164,36 @@ impl Window {
 				}
 			};
 
-			let client_rect = {
-				let mut rect = MaybeUninit::<RECT>::uninit();
-				let result = GetClientRect(self.window, rect.as_mut_ptr());
-				if result.0 == 0 {
-					error!("{}", io::Error::last_os_error());
+			let (window_width, window_height) = match window_dimensions(self.window) {
+				Ok(v) => v,
+				Err(err) => {
+					error!("{err}");
 					return;
 				}
-				rect.assume_init()
 			};
-
-			let window_width = client_rect.right - client_rect.left;
-			let window_height = client_rect.bottom - client_rect.top;
 
 			display_bitmap(
 				device_context.0,
-				client_rect,
 				*self.bitmap_data,
-				0,
-				0,
 				window_width,
 				window_height,
 			);
 		}
+	}
+}
+
+/// Returns size of a given window in a form (width, height).
+fn window_dimensions(window: HWND) -> io::Result<(i32, i32)> {
+	unsafe {
+		let mut rect = MaybeUninit::<RECT>::uninit();
+		let result = GetClientRect(window, rect.as_mut_ptr());
+		if result.0 == 0 {
+			return Err(io::Error::last_os_error());
+		}
+		let rect = rect.assume_init();
+		let width = rect.right - rect.left;
+		let height = rect.bottom - rect.top;
+		Ok((width, height))
 	}
 }
 
@@ -207,23 +237,23 @@ unsafe extern "system" fn main_window_callback(
 			SetWindowLongPtrW(window_handle, GWLP_USERDATA, bitmap_data_ptr);
 		}
 		WM_SIZE => {
+			/*
 			debug!("WM_SIZE");
 
-			let client_rect = unsafe {
-				let mut rect = MaybeUninit::<RECT>::uninit();
-				let result = GetClientRect(window_handle, rect.as_mut_ptr());
-				if result.0 == 0 {
-					error!("{}", io::Error::last_os_error());
+			let (width, height) = match window_dimensions(window_handle) {
+				Ok(v) => v,
+				Err(err) => {
+					error!("{err}");
 					return LRESULT(callback_result);
 				}
-				rect.assume_init()
 			};
-			let width = client_rect.right - client_rect.left;
-			let height = client_rect.bottom - client_rect.top;
+
+			info!("New size: {width}x{height}");
 
 			if let Err(err) = resize_dib_section(bitmap_data, width, height) {
 				error!("resize_dib_section: {err}");
 			}
+			*/
 		}
 		WM_DESTROY => {
 			debug!("WM_DESTROY");
@@ -244,30 +274,15 @@ unsafe extern "system" fn main_window_callback(
 			}
 			let paint = paint.assume_init();
 
-			let x = paint.rcPaint.left;
-			let y = paint.rcPaint.top;
-			let width = paint.rcPaint.right - paint.rcPaint.left;
-			let height = paint.rcPaint.bottom - paint.rcPaint.top;
-
-			let client_rect = {
-				let mut rect = MaybeUninit::<RECT>::uninit();
-				let result = GetClientRect(window_handle, rect.as_mut_ptr());
-				if result.0 == 0 {
-					error!("{}", io::Error::last_os_error());
+			let (window_width, window_height) = match window_dimensions(window_handle) {
+				Ok(v) => v,
+				Err(err) => {
+					error!("{err}");
 					return LRESULT(callback_result);
 				}
-				rect.assume_init()
 			};
 
-			display_bitmap(
-				device_context,
-				client_rect,
-				*bitmap_data,
-				x,
-				y,
-				width,
-				height,
-			);
+			display_bitmap(device_context, *bitmap_data, window_width, window_height);
 
 			EndPaint(window_handle, &paint);
 		},
@@ -305,27 +320,6 @@ unsafe extern "system" fn main_window_callback(
 
 	LRESULT(callback_result)
 }
-
-#[derive(Copy, Clone)]
-struct BitmapData {
-	bitmap_memory: *mut std::os::raw::c_void,
-	bitmap_memory_size: usize,
-	bitmap_info: BITMAPINFO,
-	bitmap_width: i32,
-	bitmap_height: i32,
-	player_x: usize,
-	player_y: usize,
-	player_width: usize,
-	player_height: usize,
-}
-
-impl Default for BitmapData {
-	fn default() -> Self {
-		unsafe { mem::transmute([0_u8; mem::size_of::<BitmapData>()]) }
-	}
-}
-
-unsafe impl Sync for BitmapData {}
 
 unsafe fn resize_dib_section(
 	bitmap_data: &mut BitmapData,
@@ -381,19 +375,12 @@ unsafe fn resize_dib_section(
 	Ok(())
 }
 
-#[allow(unused_variables)]
 unsafe fn display_bitmap(
 	device_context: HDC,
-	window_rect: RECT,
 	bitmap_data: BitmapData,
-	x: i32,
-	y: i32,
-	width: i32,
-	height: i32,
+	window_width: i32,
+	window_height: i32,
 ) {
-	let window_width = window_rect.right - window_rect.left;
-	let window_height = window_rect.bottom - window_rect.top;
-
 	if window_width == 0 || window_height == 0 {
 		return;
 	}
@@ -402,12 +389,12 @@ unsafe fn display_bitmap(
 		device_context,
 		0,
 		0,
-		bitmap_data.bitmap_width,
-		bitmap_data.bitmap_height,
-		0,
-		0,
 		window_width,
 		window_height,
+		0,
+		0,
+		bitmap_data.bitmap_width,
+		bitmap_data.bitmap_height,
 		Some(bitmap_data.bitmap_memory),
 		&bitmap_data.bitmap_info,
 		DIB_RGB_COLORS,
