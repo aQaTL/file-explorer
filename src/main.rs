@@ -69,22 +69,22 @@ fn update(window: &mut Window) {
 	let bitmap_data = &mut window.window_data.bitmap_data;
 
 	if keyboard.is_pressed(Key::Up) && bitmap_data.player_y > 0 {
-		bitmap_data.player_y -= 10;
+		bitmap_data.player_y -= 5;
 	}
 
 	if keyboard.is_pressed(Key::Down)
 		&& (bitmap_data.player_y as i32)
 			< bitmap_data.bitmap_height - bitmap_data.player_height as i32
 	{
-		bitmap_data.player_y += 10;
+		bitmap_data.player_y += 5;
 	}
 	if keyboard.is_pressed(Key::Left) && bitmap_data.player_x > 0 {
-		bitmap_data.player_x -= 10;
+		bitmap_data.player_x -= 5;
 	}
 	if keyboard.is_pressed(Key::Right)
 		&& (bitmap_data.player_x as i32)
 			< bitmap_data.bitmap_width - bitmap_data.player_width as i32
 	{
-		bitmap_data.player_x += 10;
+		bitmap_data.player_x += 5;
 	}
 }

@@ -410,10 +410,7 @@ unsafe fn display_bitmap(
 	);
 	if matches!(result, 0 | GDI_ERROR) {
 		error!("StretchDIBits failed: {}", io::Error::last_os_error());
-		return;
 	}
-
-	return;
 }
 
 unsafe fn render(bitmap_data: BitmapData, x_offset: usize, y_offset: usize) {
