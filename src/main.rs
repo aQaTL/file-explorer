@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "windows_subsystem", windows_subsystem = "windows")]
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::{io, ops::ControlFlow};
 
 use log::error;
@@ -27,8 +28,18 @@ fn main_() -> Result<(), io::Error> {
 		y_offset: 0,
 	};
 
-	#[cfg(feature = "fps")]
 	let mut start = std::time::Instant::now();
+
+	static FPS: AtomicU32 = AtomicU32::new(0);
+
+	#[cfg(feature = "fps")]
+	{
+		std::thread::spawn(|| loop {
+			let fps = FPS.load(Ordering::Relaxed);
+			log::info!("FPS: {fps}");
+			std::thread::sleep(std::time::Duration::from_millis(100));
+		});
+	}
 
 	while let ControlFlow::Continue(_) = window.process_messages() {
 		update(&mut window);
@@ -36,11 +47,11 @@ fn main_() -> Result<(), io::Error> {
 		window.render(&state);
 		state.x_offset += 1;
 
-		#[cfg(feature = "fps")]
 		{
 			let elapsed = start.elapsed();
-			let fps = 1000.0 / (elapsed.as_millis() as f64);
-			log::debug!("{elapsed:?}\tFPS {fps:.0}");
+			let fps = (1000.0 / (elapsed.as_millis() as f64)) as u32;
+			FPS.store(fps, Ordering::Relaxed);
+			//log::debug!("{elapsed:?}\tFPS {fps:.0}");
 			start = std::time::Instant::now();
 		}
 	}
