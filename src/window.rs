@@ -1,9 +1,9 @@
-use core::slice;
 use std::{
 	ffi::c_void,
 	io,
 	mem::{self, MaybeUninit},
 	ops::ControlFlow,
+	slice, usize,
 };
 
 use log::{debug, error};
@@ -19,42 +19,48 @@ use windows::{
 			LibraryLoader::GetModuleHandleW,
 			Memory::{VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, PAGE_READWRITE},
 		},
-		UI::{
-			Input::KeyboardAndMouse::{VIRTUAL_KEY, VK_DOWN, VK_LEFT, VK_RIGHT, VK_UP},
-			WindowsAndMessaging::{
-				CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect,
-				GetWindowLongPtrW, PeekMessageW, PostQuitMessage, RegisterClassW,
-				SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW,
-				CW_USEDEFAULT, GWLP_USERDATA, HCURSOR, HICON, HMENU, MSG, PM_REMOVE,
-				WINDOW_EX_STYLE, WM_ACTIVATEAPP, WM_CLOSE, WM_CREATE, WM_DESTROY, WM_KEYDOWN,
-				WM_PAINT, WM_QUIT, WM_SIZE, WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
-			},
+		UI::WindowsAndMessaging::{
+			CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetWindowLongPtrW,
+			PeekMessageW, PostQuitMessage, RegisterClassW, SetWindowLongPtrW, TranslateMessage,
+			CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, GWLP_USERDATA, HCURSOR, HICON,
+			HMENU, MSG, PM_REMOVE, WINDOW_EX_STYLE, WM_ACTIVATEAPP, WM_CLOSE, WM_CREATE,
+			WM_DESTROY, WM_KEYDOWN, WM_KEYUP, WM_PAINT, WM_QUIT, WM_SIZE, WNDCLASSW,
+			WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 		},
 	},
 };
 
+use crate::key::Key;
 use crate::string::WindowsStrings;
 
-#[allow(dead_code)]
 pub struct Window {
 	window: HWND,
+
+	#[allow(dead_code)]
 	classname: Vec<u16>,
+	#[allow(dead_code)]
 	window_title: Vec<u16>,
 
-	bitmap_data: Box<BitmapData>,
+	pub window_data: Box<WindowData>,
+}
+
+#[derive(Default)]
+pub struct WindowData {
+	pub bitmap_data: BitmapData,
+	pub keyboard: Keyboard,
 }
 
 #[derive(Copy, Clone)]
-struct BitmapData {
+pub struct BitmapData {
 	bitmap_memory: *mut std::os::raw::c_void,
 	bitmap_memory_size: usize,
 	bitmap_info: BITMAPINFO,
-	bitmap_width: i32,
-	bitmap_height: i32,
-	player_x: usize,
-	player_y: usize,
-	player_width: usize,
-	player_height: usize,
+	pub bitmap_width: i32,
+	pub bitmap_height: i32,
+	pub player_x: usize,
+	pub player_y: usize,
+	pub player_width: usize,
+	pub player_height: usize,
 }
 
 impl Default for BitmapData {
@@ -65,17 +71,39 @@ impl Default for BitmapData {
 
 unsafe impl Sync for BitmapData {}
 
+pub struct Keyboard {
+	keyboard: [bool; 65536],
+}
+
+impl Default for Keyboard {
+	fn default() -> Self {
+		Keyboard {
+			keyboard: [false; 65536],
+		}
+	}
+}
+
+impl Keyboard {
+	#[inline]
+	pub fn is_pressed(&self, key: Key) -> bool {
+		self.keyboard[key as usize]
+	}
+}
+
 impl Window {
 	pub fn open() -> io::Result<Self> {
 		unsafe {
 			debug!("Create window");
 
-			let mut bitmap_data = Box::new(BitmapData {
-				player_width: 50,
-				player_height: 500,
+			let mut window_data = Box::new(WindowData {
+				bitmap_data: BitmapData {
+					player_width: 50,
+					player_height: 500,
+					..Default::default()
+				},
 				..Default::default()
 			});
-			if let Err(err) = resize_dib_section(&mut bitmap_data, 1280, 720) {
+			if let Err(err) = resize_dib_section(&mut window_data.bitmap_data, 1280, 720) {
 				error!("resize_dib_section: {err}");
 			}
 
@@ -103,7 +131,7 @@ impl Window {
 
 			let window_title = "File Explorer".to_utf16_with_null();
 
-			let bitmap_data_ptr = (bitmap_data.as_ref() as *const BitmapData).cast::<c_void>();
+			let window_data_ptr = (window_data.as_ref() as *const WindowData).cast::<c_void>();
 
 			let hwnd = CreateWindowExW(
 				WINDOW_EX_STYLE::default(),
@@ -117,7 +145,7 @@ impl Window {
 				HWND::default(),
 				HMENU::default(),
 				h_instance,
-				Some(bitmap_data_ptr),
+				Some(window_data_ptr),
 			);
 			debug!("Window created");
 
@@ -131,7 +159,7 @@ impl Window {
 				classname,
 				window_title,
 
-				bitmap_data,
+				window_data,
 			};
 
 			Ok(window)
@@ -152,9 +180,9 @@ impl Window {
 		}
 	}
 
-	pub fn render(&self, x_offset: usize, y_offset: usize) {
+	pub fn render(&self, state: &crate::State) {
 		unsafe {
-			render(*self.bitmap_data, x_offset, y_offset);
+			render(self.window_data.bitmap_data, state.x_offset, state.y_offset);
 
 			let device_context = match DeviceContext::get(self.window) {
 				Ok(v) => v,
@@ -174,7 +202,7 @@ impl Window {
 
 			display_bitmap(
 				device_context.0,
-				*self.bitmap_data,
+				self.window_data.bitmap_data,
 				window_width,
 				window_height,
 			);
@@ -225,7 +253,8 @@ unsafe extern "system" fn main_window_callback(
 ) -> LRESULT {
 	//TODO Figure out how to return Rust errors instead of just logging them
 
-	let bitmap_data = &mut *(GetWindowLongPtrW(window_handle, GWLP_USERDATA) as *mut BitmapData);
+	let window_data = &mut *(GetWindowLongPtrW(window_handle, GWLP_USERDATA) as *mut WindowData);
+	let bitmap_data = &mut window_data.bitmap_data;
 
 	let mut callback_result = 0;
 
@@ -233,8 +262,8 @@ unsafe extern "system" fn main_window_callback(
 		WM_CREATE => {
 			debug!("WM_CREATE");
 			let create_struct = &*mem::transmute::<_, *const CREATESTRUCTW>(l_param);
-			let bitmap_data_ptr = create_struct.lpCreateParams as isize;
-			SetWindowLongPtrW(window_handle, GWLP_USERDATA, bitmap_data_ptr);
+			let window_data_ptr = create_struct.lpCreateParams as isize;
+			SetWindowLongPtrW(window_handle, GWLP_USERDATA, window_data_ptr);
 		}
 		WM_SIZE => {
 			/*
@@ -286,33 +315,12 @@ unsafe extern "system" fn main_window_callback(
 
 			EndPaint(window_handle, &paint);
 		},
-		WM_KEYDOWN => match VIRTUAL_KEY(w_param.0 as u16) {
-			VK_UP => {
-				if bitmap_data.player_y > 0 {
-					bitmap_data.player_y -= 10;
-				}
-			}
-			VK_DOWN => {
-				if (bitmap_data.player_y as i32)
-					< bitmap_data.bitmap_height - bitmap_data.player_height as i32
-				{
-					bitmap_data.player_y += 10;
-				}
-			}
-			VK_LEFT => {
-				if bitmap_data.player_x > 0 {
-					bitmap_data.player_x -= 10;
-				}
-			}
-			VK_RIGHT => {
-				if (bitmap_data.player_x as i32)
-					< bitmap_data.bitmap_width - bitmap_data.player_width as i32
-				{
-					bitmap_data.player_x += 10;
-				}
-			}
-			_ => (),
-		},
+		WM_KEYDOWN => {
+			window_data.keyboard.keyboard[w_param.0] = true;
+		}
+		WM_KEYUP => {
+			window_data.keyboard.keyboard[w_param.0] = false;
+		}
 		_ => {
 			callback_result = DefWindowProcW(window_handle, message, w_param, l_param).0;
 		}
