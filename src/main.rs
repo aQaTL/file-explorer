@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "windows_subsystem", windows_subsystem = "windows")]
 
-use std::{io, ops::ControlFlow, time::Instant};
+use std::{io, ops::ControlFlow};
 
 use log::error;
 
@@ -22,15 +22,20 @@ fn main_() -> Result<(), io::Error> {
 
 	let (mut x_offset, y_offset) = (0, 0);
 
-	//let mut start = Instant::now();
+	#[cfg(feature = "fps")]
+	let mut start = std::time::Instant::now();
 
 	while let ControlFlow::Continue(_) = window.process_messages() {
 		window.render(x_offset, y_offset);
 		x_offset += 1;
-		//let elapsed = start.elapsed();
-		//let fps = 1000.0 / (elapsed.as_millis() as f64);
-		//info!("{elapsed:?}\tFPS {fps:.0}");
-		//start = Instant::now();
+
+		#[cfg(feature = "fps")]
+		{
+			let elapsed = start.elapsed();
+			let fps = 1000.0 / (elapsed.as_millis() as f64);
+			log::debug!("{elapsed:?}\tFPS {fps:.0}");
+			start = std::time::Instant::now();
+		}
 	}
 
 	Ok(())

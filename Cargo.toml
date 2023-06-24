@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 default = []
 windows_subsystem = []
+fps = []
 
 [dependencies]
 aqa_logger = { git = "https://github.com/aqatl/aqa_logger", version = "0.1.1" }
