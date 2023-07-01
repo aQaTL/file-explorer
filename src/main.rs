@@ -71,7 +71,6 @@ fn update(window: &mut Window) {
 	if keyboard.is_pressed(Key::Up) && bitmap_data.player_y > 0 {
 		bitmap_data.player_y -= 5;
 	}
-
 	if keyboard.is_pressed(Key::Down)
 		&& (bitmap_data.player_y as i32)
 			< bitmap_data.bitmap_height - bitmap_data.player_height as i32

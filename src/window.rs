@@ -1,4 +1,5 @@
 use std::{
+	collections::HashMap,
 	ffi::c_void,
 	io,
 	mem::{self, MaybeUninit},
@@ -48,6 +49,9 @@ pub struct Window {
 pub struct WindowData {
 	pub bitmap_data: BitmapData,
 	pub keyboard: Keyboard,
+
+	#[allow(clippy::type_complexity)]
+	key_handlers: HashMap<Key, Box<dyn Fn(&mut BitmapData, &mut Keyboard)>>,
 }
 
 #[derive(Copy, Clone)]
@@ -208,6 +212,14 @@ impl Window {
 			);
 		}
 	}
+
+	#[allow(dead_code)]
+	pub fn on_key_press<F>(&mut self, key: Key, f: F)
+	where
+		F: Fn(&mut BitmapData, &mut Keyboard) + 'static,
+	{
+		self.window_data.key_handlers.insert(key, Box::new(f));
+	}
 }
 
 /// Returns size of a given window in a form (width, height).
@@ -255,6 +267,7 @@ unsafe extern "system" fn main_window_callback(
 
 	let window_data = &mut *(GetWindowLongPtrW(window_handle, GWLP_USERDATA) as *mut WindowData);
 	let bitmap_data = &mut window_data.bitmap_data;
+	let key_handlers = &mut window_data.key_handlers;
 
 	let mut callback_result = 0;
 
@@ -316,7 +329,14 @@ unsafe extern "system" fn main_window_callback(
 			EndPaint(window_handle, &paint);
 		},
 		WM_KEYDOWN => {
+			let was_down = window_data.keyboard.keyboard[w_param.0];
 			window_data.keyboard.keyboard[w_param.0] = true;
+			if !was_down {
+				let key: Key = unsafe { std::mem::transmute(w_param.0 as u16) };
+				if let Some(handler) = key_handlers.get(&key) {
+					handler(bitmap_data, &mut window_data.keyboard);
+				}
+			}
 		}
 		WM_KEYUP => {
 			window_data.keyboard.keyboard[w_param.0] = false;

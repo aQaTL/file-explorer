@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(u16)]
 pub enum Key {
 	Num0 = 48u16,
