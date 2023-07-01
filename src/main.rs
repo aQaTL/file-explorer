@@ -5,9 +5,11 @@ use std::{io, ops::ControlFlow};
 
 use log::error;
 
+use crate::draw::{draw_background, draw_rectangle};
 use crate::key::Key;
 use crate::window::Window;
 
+mod draw;
 mod key;
 mod string;
 mod window;
@@ -23,13 +25,27 @@ fn main() {
 fn main_() -> Result<(), io::Error> {
 	let mut window = Window::open()?;
 
-	let mut state = State {
-		x_offset: 0,
-		y_offset: 0,
-	};
+	let mut state = Box::new(State {
+		background: BackgroundState {
+			x_offset: 0,
+			y_offset: 0,
+		},
+		player: PlayerState {
+			x: 0,
+			y: 0,
+			width: 50,
+			height: 500,
+		},
+	});
+
+	let state_ptr = state.as_ref() as *const State;
+	window.on_key_press(Key::F3, move |_window, _keyboard| {
+		// SAFETY: state lives for the duration for the program
+		let state = unsafe { &*state_ptr };
+		println!("{state:?}");
+	});
 
 	let mut start = std::time::Instant::now();
-
 	static FPS: AtomicU32 = AtomicU32::new(0);
 
 	#[cfg(feature = "fps")]
@@ -42,10 +58,12 @@ fn main_() -> Result<(), io::Error> {
 	}
 
 	while let ControlFlow::Continue(_) = window.process_messages() {
-		update(&mut window);
+		update(&mut window, &mut state);
+		render(&mut window, &mut state);
 
-		window.render(&state);
-		state.x_offset += 1;
+		window.render();
+		state.background.x_offset += 1;
+		state.background.y_offset += 1;
 
 		{
 			let elapsed = start.elapsed();
@@ -59,31 +77,60 @@ fn main_() -> Result<(), io::Error> {
 	Ok(())
 }
 
+#[derive(Debug)]
 pub struct State {
+	pub background: BackgroundState,
+	pub player: PlayerState,
+}
+
+#[derive(Debug)]
+pub struct BackgroundState {
 	pub x_offset: usize,
 	pub y_offset: usize,
 }
 
-fn update(window: &mut Window) {
+#[derive(Debug)]
+pub struct PlayerState {
+	pub x: usize,
+	pub y: usize,
+	pub width: usize,
+	pub height: usize,
+}
+
+fn update(window: &mut Window, state: &mut State) {
 	let keyboard = &window.window_data.keyboard;
 	let bitmap_data = &mut window.window_data.bitmap_data;
 
-	if keyboard.is_pressed(Key::Up) && bitmap_data.player_y > 0 {
-		bitmap_data.player_y -= 5;
+	if keyboard.is_pressed(Key::Up) && state.player.y > 0 {
+		state.player.y -= 5;
 	}
 	if keyboard.is_pressed(Key::Down)
-		&& (bitmap_data.player_y as i32)
-			< bitmap_data.bitmap_height - bitmap_data.player_height as i32
+		&& (state.player.y as i32) < bitmap_data.bitmap_height - state.player.height as i32
 	{
-		bitmap_data.player_y += 5;
+		state.player.y += 5;
 	}
-	if keyboard.is_pressed(Key::Left) && bitmap_data.player_x > 0 {
-		bitmap_data.player_x -= 5;
+	if keyboard.is_pressed(Key::Left) && state.player.x > 0 {
+		state.player.x -= 5;
 	}
 	if keyboard.is_pressed(Key::Right)
-		&& (bitmap_data.player_x as i32)
-			< bitmap_data.bitmap_width - bitmap_data.player_width as i32
+		&& (state.player.x as i32) < bitmap_data.bitmap_width - state.player.width as i32
 	{
-		bitmap_data.player_x += 5;
+		state.player.x += 5;
 	}
+}
+
+fn render(window: &mut Window, state: &mut State) {
+	let bitmap_data = window.window_data.bitmap_data;
+
+	draw_background(
+		bitmap_data,
+		state.background.x_offset,
+		state.background.y_offset,
+	);
+	draw_rectangle(
+		bitmap_data,
+		(state.player.x, state.player.y),
+		(state.player.width, state.player.height),
+		0xd3869b,
+	);
 }

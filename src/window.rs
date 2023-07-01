@@ -61,10 +61,6 @@ pub struct BitmapData {
 	bitmap_info: BITMAPINFO,
 	pub bitmap_width: i32,
 	pub bitmap_height: i32,
-	pub player_x: usize,
-	pub player_y: usize,
-	pub player_width: usize,
-	pub player_height: usize,
 }
 
 impl Default for BitmapData {
@@ -74,6 +70,19 @@ impl Default for BitmapData {
 }
 
 unsafe impl Sync for BitmapData {}
+
+impl BitmapData {
+	#[inline]
+	pub fn as_slice(&self) -> &mut [u32] {
+		let bitmap_memory: &'static mut [u32] = unsafe {
+			slice::from_raw_parts_mut(
+				self.bitmap_memory.cast::<u32>(),
+				self.bitmap_memory_size / std::mem::size_of::<u32>(),
+			)
+		};
+		bitmap_memory
+	}
+}
 
 pub struct Keyboard {
 	keyboard: [bool; 65536],
@@ -99,14 +108,7 @@ impl Window {
 		unsafe {
 			debug!("Create window");
 
-			let mut window_data = Box::new(WindowData {
-				bitmap_data: BitmapData {
-					player_width: 50,
-					player_height: 500,
-					..Default::default()
-				},
-				..Default::default()
-			});
+			let mut window_data = Box::new(WindowData::default());
 			if let Err(err) = resize_dib_section(&mut window_data.bitmap_data, 1280, 720) {
 				error!("resize_dib_section: {err}");
 			}
@@ -184,10 +186,8 @@ impl Window {
 		}
 	}
 
-	pub fn render(&self, state: &crate::State) {
+	pub fn render(&self) {
 		unsafe {
-			render(self.window_data.bitmap_data, state.x_offset, state.y_offset);
-
 			let device_context = match DeviceContext::get(self.window) {
 				Ok(v) => v,
 				Err(err) => {
@@ -398,8 +398,6 @@ unsafe fn resize_dib_section(
 	bitmap_data.bitmap_memory = bitmap_memory;
 	bitmap_data.bitmap_memory_size = bitmap_memory_size;
 
-	render(*bitmap_data, 128, 0);
-
 	Ok(())
 }
 
@@ -430,33 +428,5 @@ unsafe fn display_bitmap(
 	);
 	if matches!(result, 0 | GDI_ERROR) {
 		error!("StretchDIBits failed: {}", io::Error::last_os_error());
-	}
-}
-
-unsafe fn render(bitmap_data: BitmapData, x_offset: usize, y_offset: usize) {
-	let bitmap_memory: &'static mut [u32] = slice::from_raw_parts_mut(
-		bitmap_data.bitmap_memory.cast::<u32>(),
-		bitmap_data.bitmap_memory_size / std::mem::size_of::<u32>(),
-	);
-
-	for y in 0..(bitmap_data.bitmap_height as usize) {
-		for x in 0..(bitmap_data.bitmap_width as usize) {
-			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
-			//*pixel = 0xFF8000;
-			//*pixel = (((x & 0xFF) << 0) | ((y & 0xFF) << 8)) as u32;
-			*pixel = ((x + x_offset) & 0xFF | (((y + y_offset) & 0xFF) << 8)) as u32;
-		}
-	}
-
-	for y in bitmap_data.player_y
-		..(bitmap_data.player_y + bitmap_data.player_height).min(bitmap_data.bitmap_height as usize)
-	{
-		for x in bitmap_data.player_x
-			..(bitmap_data.player_x + bitmap_data.player_width)
-				.min(bitmap_data.bitmap_width as usize)
-		{
-			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
-			*pixel = 0xd3869b;
-		}
 	}
 }
