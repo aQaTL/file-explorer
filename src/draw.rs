@@ -29,7 +29,6 @@ pub fn draw_rectangle(
 	}
 }
 
-// TODO handle alpha channel
 pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, pos_y: usize) {
 	let bitmap_memory = bitmap_data.into_slice();
 
@@ -40,7 +39,26 @@ pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, po
 			(pos_x..(pos_x + texture.width).min(bitmap_data.bitmap_width as usize)).enumerate()
 		{
 			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
-			*pixel = texture.bitmap[tex_y * texture.width + tex_x];
+			let bitmap_pixel = texture.bitmap[tex_y * texture.width as usize + tex_x];
+
+			let alpha = (((bitmap_pixel >> 24) & 0xFF) as f32) / 255.0;
+
+			let background_r = ((*pixel >> 16) & 0xFF) as f32;
+			let background_g = ((*pixel >> 8) & 0xFF) as f32;
+			let background_b = (*pixel & 0xFF) as f32;
+			let foreground_r = ((bitmap_pixel >> 16) & 0xFF) as f32;
+			let foreground_g = ((bitmap_pixel >> 8) & 0xFF) as f32;
+			let foreground_b = (bitmap_pixel & 0xFF) as f32;
+
+			let r = lerp(background_r, foreground_r, alpha) as u32;
+			let g = lerp(background_g, foreground_g, alpha) as u32;
+			let b = lerp(background_b, foreground_b, alpha) as u32;
+
+			*pixel = (r << 16) | (g << 8) | b;
 		}
 	}
+}
+
+fn lerp(v0: f32, v1: f32, t: f32) -> f32 {
+	v0 + t * (v1 - v0)
 }

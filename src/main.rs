@@ -136,7 +136,7 @@ fn update(window: &mut Window, state: &mut State) {
 	{
 		state.player.y += 5;
 	}
-	if keyboard.is_pressed(Key::Left) && state.player.x > 0 {
+	if keyboard.is_pressed(Key::Left) {
 		state.player.x = state.player.x.saturating_sub(5);
 	}
 	if keyboard.is_pressed(Key::Right)
@@ -161,6 +161,15 @@ fn update(window: &mut Window, state: &mut State) {
 		let logo_tex = state.textures.get("logo").unwrap();
 		if (state.logo_pos.y as i32) < bitmap_data.bitmap_height - logo_tex.height as i32 {
 			state.logo_pos.y += 5;
+		}
+	}
+	if keyboard.is_pressed(Key::A) {
+		state.logo_pos.x = state.logo_pos.x.saturating_sub(5);
+	}
+	if keyboard.is_pressed(Key::D) {
+		let logo_tex = state.textures.get("logo").unwrap();
+		if (state.logo_pos.x as i32) < bitmap_data.bitmap_width - logo_tex.width as i32 {
+			state.logo_pos.x += 5;
 		}
 	}
 }
