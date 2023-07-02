@@ -184,4 +184,6 @@ pub enum Key {
 	GamepadRightThumbstickDown = 216u16,
 	GamepadRightThumbstickRight = 217u16,
 	GamepadRightThumbstickLeft = 218u16,
+	LeftBrace = 219_u16,
+	RightBrace = 221_u16,
 }

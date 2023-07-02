@@ -1,7 +1,7 @@
-use crate::window::BitmapData;
+use crate::{window::BitmapData, Texture};
 
 pub fn draw_background(bitmap_data: BitmapData, x_offset: usize, y_offset: usize) {
-	let bitmap_memory = bitmap_data.as_slice();
+	let bitmap_memory = bitmap_data.into_slice();
 
 	for y in 0..(bitmap_data.bitmap_height as usize) {
 		for x in 0..(bitmap_data.bitmap_width as usize) {
@@ -19,12 +19,28 @@ pub fn draw_rectangle(
 	(width, height): (usize, usize),
 	color: u32,
 ) {
-	let bitmap_memory = bitmap_data.as_slice();
+	let bitmap_memory = bitmap_data.into_slice();
 
 	for y in pos_y..(pos_y + height).min(bitmap_data.bitmap_height as usize) {
 		for x in pos_x..(pos_x + width).min(bitmap_data.bitmap_width as usize) {
 			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
 			*pixel = color;
 		}
+	}
+}
+
+// TODO handle alpha channel
+pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, pos_y: usize) {
+	let bitmap_memory = bitmap_data.into_slice();
+
+	let mut tex_y = 0;
+	for y in pos_y..(pos_y + texture.height).min(bitmap_data.bitmap_height as usize) {
+		let mut tex_x = 0;
+		for x in pos_x..(pos_x + texture.width).min(bitmap_data.bitmap_width as usize) {
+			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
+			*pixel = texture.bitmap[tex_y * texture.width + tex_x];
+			tex_x += 1;
+		}
+		tex_y += 1;
 	}
 }

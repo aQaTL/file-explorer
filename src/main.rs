@@ -1,16 +1,18 @@
 #![cfg_attr(feature = "windows_subsystem", windows_subsystem = "windows")]
 
+use std::collections::HashMap;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::{io, ops::ControlFlow};
 
 use log::error;
 
-use crate::draw::{draw_background, draw_rectangle};
+use crate::draw::{draw_background, draw_rectangle, draw_texture};
 use crate::key::Key;
 use crate::window::Window;
 
 mod draw;
 mod key;
+mod png;
 mod string;
 mod window;
 
@@ -22,7 +24,7 @@ fn main() {
 	}
 }
 
-fn main_() -> Result<(), io::Error> {
+fn main_() -> Result<(), Box<dyn std::error::Error>> {
 	let mut window = Window::open()?;
 
 	let mut state = Box::new(State {
@@ -36,6 +38,8 @@ fn main_() -> Result<(), io::Error> {
 			width: 50,
 			height: 500,
 		},
+		textures: load_textures()?,
+		logo_pos: Pos { x: 10, y: 10 },
 	});
 
 	let state_ptr = state.as_ref() as *const State;
@@ -77,10 +81,19 @@ fn main_() -> Result<(), io::Error> {
 	Ok(())
 }
 
+fn load_textures() -> Result<HashMap<&'static str, Texture>, png::Error> {
+	let textures = [("logo", png::Png::load_from_path("assets/logo.png")?.into())];
+	Ok(textures.into_iter().collect::<HashMap<_, _>>())
+}
+
 #[derive(Debug)]
 pub struct State {
 	pub background: BackgroundState,
 	pub player: PlayerState,
+
+	pub textures: HashMap<&'static str, Texture>,
+
+	pub logo_pos: Pos,
 }
 
 #[derive(Debug)]
@@ -97,12 +110,26 @@ pub struct PlayerState {
 	pub height: usize,
 }
 
+#[derive(Debug)]
+pub struct Texture {
+	/// RGBA image
+	bitmap: Vec<u32>,
+	width: usize,
+	height: usize,
+}
+
+#[derive(Debug)]
+pub struct Pos {
+	pub x: usize,
+	pub y: usize,
+}
+
 fn update(window: &mut Window, state: &mut State) {
 	let keyboard = &window.window_data.keyboard;
 	let bitmap_data = &mut window.window_data.bitmap_data;
 
 	if keyboard.is_pressed(Key::Up) && state.player.y > 0 {
-		state.player.y -= 5;
+		state.player.y = state.player.y.saturating_sub(5);
 	}
 	if keyboard.is_pressed(Key::Down)
 		&& (state.player.y as i32) < bitmap_data.bitmap_height - state.player.height as i32
@@ -110,12 +137,31 @@ fn update(window: &mut Window, state: &mut State) {
 		state.player.y += 5;
 	}
 	if keyboard.is_pressed(Key::Left) && state.player.x > 0 {
-		state.player.x -= 5;
+		state.player.x = state.player.x.saturating_sub(5);
 	}
 	if keyboard.is_pressed(Key::Right)
 		&& (state.player.x as i32) < bitmap_data.bitmap_width - state.player.width as i32
 	{
 		state.player.x += 5;
+	}
+	if keyboard.is_pressed(Key::LeftBrace) && state.player.height > 0 {
+		state.player.height -= 1;
+		state.player.y += 1;
+	}
+	if keyboard.is_pressed(Key::RightBrace) && state.player.y > 0 {
+		state.player.height += 1;
+		state.player.y -= 1;
+	}
+
+	//Moving logo texture
+	if keyboard.is_pressed(Key::W) && state.logo_pos.y > 0 {
+		state.logo_pos.y = state.logo_pos.y.saturating_sub(5);
+	}
+	if keyboard.is_pressed(Key::S) {
+		let logo_tex = state.textures.get("logo").unwrap();
+		if (state.logo_pos.y as i32) < bitmap_data.bitmap_height - logo_tex.height as i32 {
+			state.logo_pos.y += 5;
+		}
 	}
 }
 
@@ -132,5 +178,12 @@ fn render(window: &mut Window, state: &mut State) {
 		(state.player.x, state.player.y),
 		(state.player.width, state.player.height),
 		0xd3869b,
+	);
+
+	draw_texture(
+		bitmap_data,
+		state.textures.get("logo").unwrap(),
+		state.logo_pos.x,
+		state.logo_pos.y,
 	);
 }

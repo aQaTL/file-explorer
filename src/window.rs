@@ -73,7 +73,7 @@ unsafe impl Sync for BitmapData {}
 
 impl BitmapData {
 	#[inline]
-	pub fn as_slice(&self) -> &mut [u32] {
+	pub fn into_slice(self) -> &'static mut [u32] {
 		let bitmap_memory: &'static mut [u32] = unsafe {
 			slice::from_raw_parts_mut(
 				self.bitmap_memory.cast::<u32>(),
@@ -108,7 +108,7 @@ impl Window {
 		unsafe {
 			debug!("Create window");
 
-			let mut window_data = Box::new(WindowData::default());
+			let mut window_data = Box::<WindowData>::default();
 			if let Err(err) = resize_dib_section(&mut window_data.bitmap_data, 1280, 720) {
 				error!("resize_dib_section: {err}");
 			}
