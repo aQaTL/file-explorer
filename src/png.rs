@@ -7,6 +7,7 @@ use std::{
 };
 
 use flate2::read::ZlibDecoder;
+use log::{debug, error};
 
 pub struct Png {
 	header: IHDR,
@@ -78,7 +79,7 @@ impl Png {
 			} => ihdr,
 			_ => return Err(Error::ExpectedIHDR),
 		};
-		println!("IHDR: {ihdr:#?}");
+		debug!("IHDR: {ihdr:#?}");
 
 		// We only support one type of PNG :/
 		if ihdr.color_type != 6 || ihdr.bit_depth != 8 {
@@ -95,6 +96,29 @@ impl Png {
 				break;
 			}
 			blocks.push(block);
+		}
+
+		let mut time = None;
+
+		// Print included text blocks. Set time if found.
+		for block in &blocks {
+			let text = match block.block {
+				PngBlockKind::TEXT(text) => text,
+				PngBlockKind::TIME(ref t) => {
+					time = Some(t);
+					continue;
+				}
+				_ => continue,
+			};
+
+			let text = match std::str::from_utf8(text) {
+				Ok(v) => v,
+				Err(err) => {
+					error!("Failed to read text block: {err}");
+					continue;
+				}
+			};
+			debug!("Text block: {text}");
 		}
 
 		let decompressed_img = decompress_img_data(&blocks)?;
@@ -122,6 +146,10 @@ impl Png {
 			.chunks_exact_mut(4)
 			.map(|chunk| &mut chunk[0..3])
 			.for_each(|chunk| chunk.reverse());
+
+		if let Some(time) = time {
+			debug!("Time: {time:#?}");
+		}
 
 		Ok(Png {
 			header: ihdr,
@@ -160,13 +188,15 @@ enum PngBlockKind<'a> {
 	IHDR(IHDR),
 	IEND,
 	IDAT(IDAT<'a>),
+	TEXT(&'a [u8]),
+	TIME(TIME),
 
 	Unknown,
 }
 
 /// Image Header
-#[allow(dead_code)]
 #[derive(Debug)]
+#[allow(dead_code)]
 struct IHDR {
 	width: u32,
 	height: u32,
@@ -183,8 +213,20 @@ struct IDAT<'a> {
 	data: &'a [u8],
 }
 
+/// Time of the last image modification.
+#[derive(Debug)]
+#[allow(dead_code)]
+struct TIME {
+	year: u16,
+	month: u8,
+	day: u8,
+	hour: u8,
+	minute: u8,
+	second: u8,
+}
+
 mod parser {
-	use super::{Error, PngBlock, PngBlockKind, IDAT, IHDR};
+	use super::{Error, PngBlock, PngBlockKind, IDAT, IHDR, TIME};
 
 	pub(super) struct State {
 		/// Index of current byte in Self.data
@@ -222,6 +264,8 @@ mod parser {
 			[b'I', b'H', b'D', b'R'] => parse_ihdr(state, data, len)?,
 			[b'I', b'E', b'N', b'D'] => parse_iend(len)?,
 			[b'I', b'D', b'A', b'T'] => parse_idat(state, data, len)?,
+			[b't', b'E', b'X', b't'] => parse_text(state, data, len)?,
+			[b't', b'I', b'M', b'E'] => parse_time(state, data, len)?,
 			_ => {
 				let data = get_slice(state, data, len)?;
 				let block = PngBlockKind::Unknown;
@@ -302,6 +346,49 @@ mod parser {
 		Ok((data, PngBlockKind::IDAT(IDAT { data })))
 	}
 
+	fn parse_text<'data>(
+		state: &mut State,
+		data: &'data Data,
+		expected_len: usize,
+	) -> Result<(&'data [u8], PngBlockKind<'data>), Error> {
+		let data = get_slice(state, data, expected_len)?;
+
+		Ok((data, PngBlockKind::TEXT(data)))
+	}
+
+	fn parse_time<'data>(
+		state: &mut State,
+		data: &'data Data,
+		expected_len: usize,
+	) -> Result<(&'data [u8], PngBlockKind<'data>), Error> {
+		let start = state.current_byte;
+
+		let year = get_u16(state, data)?;
+		let month = get_u8(state, data)?;
+		let day = get_u8(state, data)?;
+		let hour = get_u8(state, data)?;
+		let minute = get_u8(state, data)?;
+		let second = get_u8(state, data)?;
+
+		let parsed_bytes = state.current_byte - start;
+		if expected_len != parsed_bytes {
+			return Err(Error::IncompleteBlock { block_kind: "tIME" });
+		}
+
+		let data = &data.data[start..state.current_byte];
+		Ok((
+			data,
+			PngBlockKind::TIME(TIME {
+				year,
+				month,
+				day,
+				hour,
+				minute,
+				second,
+			}),
+		))
+	}
+
 	fn get_u32(state: &mut State, data: &Data) -> Result<u32, Error> {
 		if state.current_byte + 4 > data.data.len() {
 			return Err(Error::FileEnd);
@@ -313,6 +400,20 @@ mod parser {
 				.unwrap(),
 		);
 		state.current_byte += 4;
+		Ok(n)
+	}
+
+	fn get_u16(state: &mut State, data: &Data) -> Result<u16, Error> {
+		if state.current_byte + 2 > data.data.len() {
+			return Err(Error::FileEnd);
+		}
+		// PNG uses Big Endian
+		let n = u16::from_be_bytes(
+			data.data[state.current_byte..(state.current_byte + 2)]
+				.try_into()
+				.unwrap(),
+		);
+		state.current_byte += 2;
 		Ok(n)
 	}
 
