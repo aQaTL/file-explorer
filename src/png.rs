@@ -542,57 +542,35 @@ fn decode_filter(
 		}
 		FilterType::Sub => {
 			for x_idx in 0..encoded_line.len() {
-				output_img.push(
-					(((encoded_line[x_idx] as u16)
-						+ ((x_idx > 3)
-							.then(|| {
-								output_img
-									.get(y_idx * encoded_line.len() + (x_idx - 4))
-									.copied()
-									.unwrap_or_default()
-							})
-							.unwrap_or_default() as u16))
-						& 0xff) as u8,
-				)
+				let a = encoded_line[x_idx];
+				let b = (x_idx > 3)
+					.then(|| output_img[y_idx * encoded_line.len() + (x_idx - 4)])
+					.unwrap_or_default();
+
+				output_img.push(a.wrapping_add(b))
 			}
 		}
 		FilterType::Up => {
 			for x_idx in 0..encoded_line.len() {
-				output_img.push(
-					(((encoded_line[x_idx] as u16)
-						+ ((y_idx > 0)
-							.then(|| {
-								output_img
-									.get((y_idx - 1) * encoded_line.len() + x_idx)
-									.copied()
-									.unwrap_or_default()
-							})
-							.unwrap_or_default() as u16))
-						& 0xff) as u8,
-				);
+				let a = encoded_line[x_idx];
+				let b = (y_idx > 0)
+					.then(|| output_img[(y_idx - 1) * encoded_line.len() + x_idx])
+					.unwrap_or_default();
+
+				output_img.push(a.wrapping_add(b));
 			}
 		}
 		FilterType::Average => {
 			for x_idx in 0..encoded_line.len() {
-				output_img.push(
-					(((encoded_line[x_idx] as u16)
-						+ (((x_idx > 3)
-							.then(|| {
-								output_img
-									.get(y_idx * encoded_line.len() + (x_idx - 4))
-									.copied()
-									.unwrap_or_default()
-							})
-							.unwrap_or_default() as u16) + ((y_idx > 0)
-							.then(|| {
-								output_img
-									.get((y_idx - 1) * encoded_line.len() + x_idx)
-									.copied()
-									.unwrap_or_default()
-							})
-							.unwrap_or_default() as u16))
-							/ 2) & 0xff) as u8,
-				);
+				let a = encoded_line[x_idx];
+				let b = (x_idx > 3)
+					.then(|| output_img[y_idx * encoded_line.len() + (x_idx - 4)])
+					.unwrap_or_default() as u16;
+				let c = (y_idx > 0)
+					.then(|| output_img[(y_idx - 1) * encoded_line.len() + x_idx])
+					.unwrap_or_default() as u16;
+
+				output_img.push(a.wrapping_add((b.wrapping_add(c) / 2) as u8));
 			}
 		}
 		FilterType::Paeth => {
@@ -606,8 +584,8 @@ fn decode_filter(
 				let c = (x_idx > 3 && y_idx > 0)
 					.then(|| output_img[(y_idx - 1) * encoded_line.len() + (x_idx - 4)])
 					.unwrap_or_default() as i16;
-				output_img
-					.push((((encoded_line[x_idx] as u16) + (paeth(a, b, c) as u16)) & 0xff) as u8);
+
+				output_img.push(encoded_line[x_idx].wrapping_add(paeth(a, b, c)));
 			}
 		}
 	}
