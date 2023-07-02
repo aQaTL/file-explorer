@@ -117,6 +117,12 @@ impl Png {
 			row_idx += 1;
 		}
 
+		raw_img
+			.as_mut_slice()
+			.chunks_exact_mut(4)
+			.map(|chunk| &mut chunk[0..3])
+			.for_each(|chunk| chunk.reverse());
+
 		Ok(Png {
 			header: ihdr,
 			img_data: raw_img,
@@ -483,7 +489,7 @@ fn decode_filter(
 									.copied()
 									.unwrap_or_default()
 							})
-							.unwrap_or_default() as u16) as u16)
+							.unwrap_or_default() as u16))
 							/ 2) & 0xff) as u8,
 				);
 			}

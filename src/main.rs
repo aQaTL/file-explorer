@@ -39,7 +39,7 @@ fn main_() -> Result<(), Box<dyn std::error::Error>> {
 			height: 500,
 		},
 		textures: load_textures()?,
-		logo_pos: Pos { x: 10, y: 10 },
+		logo_pos: Pos { x: 60, y: 80 },
 	});
 
 	let state_ptr = state.as_ref() as *const State;

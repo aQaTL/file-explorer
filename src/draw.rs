@@ -33,14 +33,14 @@ pub fn draw_rectangle(
 pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, pos_y: usize) {
 	let bitmap_memory = bitmap_data.into_slice();
 
-	let mut tex_y = 0;
-	for y in pos_y..(pos_y + texture.height).min(bitmap_data.bitmap_height as usize) {
-		let mut tex_x = 0;
-		for x in pos_x..(pos_x + texture.width).min(bitmap_data.bitmap_width as usize) {
+	for (tex_y, y) in
+		(pos_y..(pos_y + texture.height).min(bitmap_data.bitmap_height as usize)).enumerate()
+	{
+		for (tex_x, x) in
+			(pos_x..(pos_x + texture.width).min(bitmap_data.bitmap_width as usize)).enumerate()
+		{
 			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
 			*pixel = texture.bitmap[tex_y * texture.width + tex_x];
-			tex_x += 1;
 		}
-		tex_y += 1;
 	}
 }
