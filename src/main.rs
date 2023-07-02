@@ -1,10 +1,11 @@
 #![cfg_attr(feature = "windows_subsystem", windows_subsystem = "windows")]
 
-use std::collections::HashMap;
+use std::fmt::Debug;
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use log::error;
+use log::{error, info};
+use png::Png;
 
 use crate::draw::{draw_background, draw_rectangle, draw_texture};
 use crate::key::Key;
@@ -39,14 +40,13 @@ fn main_() -> Result<(), Box<dyn std::error::Error>> {
 			height: 500,
 		},
 		textures: load_textures()?,
-		logo_pos: Pos { x: 60, y: 80 },
 	});
 
 	let state_ptr = state.as_ref() as *const State;
 	window.on_key_press(Key::F3, move |_window, _keyboard| {
 		// SAFETY: state lives for the duration for the program
 		let state = unsafe { &*state_ptr };
-		println!("{state:?}");
+		info!("{state:#?}");
 	});
 
 	let mut start = std::time::Instant::now();
@@ -81,9 +81,16 @@ fn main_() -> Result<(), Box<dyn std::error::Error>> {
 	Ok(())
 }
 
-fn load_textures() -> Result<HashMap<&'static str, Texture>, png::Error> {
-	let textures = [("logo", png::Png::load_from_path("assets/logo.png")?.into())];
-	Ok(textures.into_iter().collect::<HashMap<_, _>>())
+#[derive(Debug)]
+pub struct Textures {
+	pub logo: Texture,
+}
+
+fn load_textures() -> Result<Textures, png::Error> {
+	let textures = Textures {
+		logo: Texture::from(Png::load_from_path("assets/logo.png")?).with_pos(60, 80),
+	};
+	Ok(textures)
 }
 
 #[derive(Debug)]
@@ -91,9 +98,7 @@ pub struct State {
 	pub background: BackgroundState,
 	pub player: PlayerState,
 
-	pub textures: HashMap<&'static str, Texture>,
-
-	pub logo_pos: Pos,
+	pub textures: Textures,
 }
 
 #[derive(Debug)]
@@ -110,12 +115,39 @@ pub struct PlayerState {
 	pub height: usize,
 }
 
-#[derive(Debug)]
 pub struct Texture {
 	/// RGBA image
 	bitmap: Vec<u32>,
 	width: usize,
 	height: usize,
+
+	pos: Pos,
+}
+
+impl Debug for Texture {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		struct DebuggableBitmap<'a>(&'a Vec<u32>);
+		impl<'a> Debug for DebuggableBitmap<'a> {
+			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				f.debug_struct("Vec").field("len", &self.0.len()).finish()
+			}
+		}
+
+		f.debug_struct("Texture")
+			.field("bitmap", &DebuggableBitmap(&self.bitmap))
+			.field("width", &self.width)
+			.field("height", &self.height)
+			.field("pos", &self.pos)
+			.finish()
+	}
+}
+
+impl Texture {
+	pub fn with_pos(mut self, x: usize, y: usize) -> Self {
+		self.pos.x = x;
+		self.pos.y = y;
+		self
+	}
 }
 
 #[derive(Debug)]
@@ -154,22 +186,22 @@ fn update(window: &mut Window, state: &mut State) {
 	}
 
 	//Moving logo texture
-	if keyboard.is_pressed(Key::W) && state.logo_pos.y > 0 {
-		state.logo_pos.y = state.logo_pos.y.saturating_sub(5);
+	if keyboard.is_pressed(Key::W) && state.textures.logo.pos.y > 0 {
+		state.textures.logo.pos.y = state.textures.logo.pos.y.saturating_sub(5);
 	}
 	if keyboard.is_pressed(Key::S) {
-		let logo_tex = state.textures.get("logo").unwrap();
-		if (state.logo_pos.y as i32) < bitmap_data.bitmap_height - logo_tex.height as i32 {
-			state.logo_pos.y += 5;
+		let logo_tex = &state.textures.logo;
+		if (state.textures.logo.pos.y as i32) < bitmap_data.bitmap_height - logo_tex.height as i32 {
+			state.textures.logo.pos.y += 5;
 		}
 	}
 	if keyboard.is_pressed(Key::A) {
-		state.logo_pos.x = state.logo_pos.x.saturating_sub(5);
+		state.textures.logo.pos.x = state.textures.logo.pos.x.saturating_sub(5);
 	}
 	if keyboard.is_pressed(Key::D) {
-		let logo_tex = state.textures.get("logo").unwrap();
-		if (state.logo_pos.x as i32) < bitmap_data.bitmap_width - logo_tex.width as i32 {
-			state.logo_pos.x += 5;
+		let logo_tex = &state.textures.logo;
+		if (state.textures.logo.pos.x as i32) < bitmap_data.bitmap_width - logo_tex.width as i32 {
+			state.textures.logo.pos.x += 5;
 		}
 	}
 }
@@ -191,8 +223,8 @@ fn render(window: &mut Window, state: &mut State) {
 
 	draw_texture(
 		bitmap_data,
-		state.textures.get("logo").unwrap(),
-		state.logo_pos.x,
-		state.logo_pos.y,
+		&state.textures.logo,
+		state.textures.logo.pos.x,
+		state.textures.logo.pos.y,
 	);
 }

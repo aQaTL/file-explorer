@@ -39,7 +39,7 @@ pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, po
 			(pos_x..(pos_x + texture.width).min(bitmap_data.bitmap_width as usize)).enumerate()
 		{
 			let pixel = &mut bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
-			let bitmap_pixel = texture.bitmap[tex_y * texture.width as usize + tex_x];
+			let bitmap_pixel = texture.bitmap[tex_y * texture.width + tex_x];
 
 			let alpha = (((bitmap_pixel >> 24) & 0xFF) as f32) / 255.0;
 

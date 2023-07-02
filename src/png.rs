@@ -9,6 +9,8 @@ use std::{
 use flate2::read::ZlibDecoder;
 use log::{debug, error};
 
+use crate::Pos;
+
 pub struct Png {
 	header: IHDR,
 	img_data: Vec<u8>,
@@ -169,6 +171,7 @@ impl From<Png> for crate::Texture {
 			bitmap,
 			width: img.header.width as usize,
 			height: img.header.height as usize,
+			pos: Pos { x: 0, y: 0 },
 		}
 	}
 }
