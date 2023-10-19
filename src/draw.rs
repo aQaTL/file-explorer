@@ -62,3 +62,68 @@ pub fn draw_texture(bitmap_data: BitmapData, texture: &Texture, pos_x: usize, po
 fn lerp(v0: f32, v1: f32, t: f32) -> f32 {
 	v0 + t * (v1 - v0)
 }
+
+pub fn dither(bitmap_data: BitmapData, x: usize, y: usize, width: usize, height: usize) {
+	let bitmap_memory = bitmap_data.into_slice();
+
+	for y in y..(y + height).min(bitmap_data.bitmap_height as usize) {
+		for x in x..(x + width).min(bitmap_data.bitmap_width as usize) {
+			let old_pixel = bitmap_memory[y * bitmap_data.bitmap_width as usize + x];
+			let new_pixel = find_closest_palette_color(old_pixel);
+			bitmap_memory[y * bitmap_data.bitmap_width as usize + x] = new_pixel;
+			let quant_error = old_pixel.saturating_sub(new_pixel);
+
+			if x < (bitmap_data.bitmap_width as usize - 1) {
+				let pixel_idx = y * (bitmap_data.bitmap_width as usize) + (x + 1);
+				if let Some(pixel) = bitmap_memory.get_mut(pixel_idx) {
+					*pixel += quant_error * 7 / 16;
+				}
+			}
+
+			if x > 0 && y < (bitmap_data.bitmap_height as usize - 1) {
+				let pixel_idx = (y + 1) * (bitmap_data.bitmap_width as usize) + (x - 1);
+				if let Some(pixel) = bitmap_memory.get_mut(pixel_idx) {
+					*pixel += quant_error * 3 / 16;
+				}
+			}
+
+			if y < (bitmap_data.bitmap_height as usize - 1) {
+				let pixel_idx = (y + 1) * (bitmap_data.bitmap_width as usize) + x;
+				if let Some(pixel) = bitmap_memory.get_mut(pixel_idx) {
+					*pixel += quant_error * 5 / 16;
+				}
+			}
+
+			if x < (bitmap_data.bitmap_width as usize - 1)
+				&& y < (bitmap_data.bitmap_height as usize - 1)
+			{
+				let pixel_idx = (y + 1) * (bitmap_data.bitmap_width as usize) + (x + 1);
+				if let Some(pixel) = bitmap_memory.get_mut(pixel_idx) {
+					*pixel += quant_error * 1 / 16;
+				}
+			}
+		}
+	}
+}
+
+fn find_closest_palette_color(pixel: u32) -> u32 {
+	const RED: u32 = 0xff0000;
+	const GREEN: u32 = 0x00ff00;
+	const BLUE: u32 = 0x0000ff;
+	let palette: [u32; 8] = [
+		0x000000, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff,
+	];
+	let mut nearest_color = 0;
+	let mut minimum_distance: u64 = 255 * 255 + 255 * 255 + 255 * 255 + 1;
+	for palette_color in palette {
+		let red_diff = ((pixel & RED).saturating_sub(palette_color & RED)) as u64;
+		let green_diff = ((pixel & GREEN).saturating_sub(palette_color & GREEN)) as u64;
+		let blue_diff = ((pixel & BLUE).saturating_sub(palette_color & BLUE)) as u64;
+		let distance: u64 = red_diff*red_diff + green_diff*green_diff + blue_diff*blue_diff;
+		if distance < minimum_distance {
+			minimum_distance = distance;
+			nearest_color = palette_color;
+		}
+	}
+	nearest_color
+}

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use log::{error, info};
 use png::Png;
 
-use crate::draw::{draw_background, draw_rectangle, draw_texture};
+use crate::draw::{dither, draw_background, draw_rectangle, draw_texture};
 use crate::key::Key;
 use crate::window::Window;
 
@@ -84,11 +84,13 @@ fn main_() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Debug)]
 pub struct Textures {
 	pub logo: Texture,
+	pub motorcycle: Texture,
 }
 
 fn load_textures() -> Result<Textures, png::Error> {
 	let textures = Textures {
 		logo: Texture::from(Png::load_from_path("assets/logo.png")?).with_pos(60, 80),
+		motorcycle: Texture::from(Png::load_from_path("assets/motorcycle.png")?).with_pos(200, 80),
 	};
 	Ok(textures)
 }
@@ -226,5 +228,30 @@ fn render(window: &mut Window, state: &mut State) {
 		&state.textures.logo,
 		state.textures.logo.pos.x,
 		state.textures.logo.pos.y,
+	);
+
+	draw_texture(
+		bitmap_data,
+		&state.textures.motorcycle,
+		state.textures.motorcycle.pos.x,
+		state.textures.motorcycle.pos.y,
+	);
+
+	// Apply dithering to motorcycle texture
+	dither(
+		bitmap_data,
+		state.textures.motorcycle.pos.x,
+		state.textures.motorcycle.pos.y,
+		state.textures.motorcycle.width,
+		state.textures.motorcycle.height,
+	);
+
+	// Apply dithering to logo texture
+	dither(
+		bitmap_data,
+		state.textures.logo.pos.x,
+		state.textures.logo.pos.y,
+		state.textures.logo.width,
+		state.textures.logo.height,
 	);
 }

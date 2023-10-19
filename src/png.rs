@@ -14,6 +14,7 @@ use crate::Pos;
 pub struct Png {
 	header: IHDR,
 	img_data: Vec<u8>,
+	filename: Option<String>,
 }
 
 #[derive(Debug)]
@@ -156,6 +157,7 @@ impl Png {
 		Ok(Png {
 			header: ihdr,
 			img_data: raw_img,
+			filename: Some(p.to_string()),
 		})
 	}
 }
@@ -167,12 +169,17 @@ impl From<Png> for crate::Texture {
 		let len = img_data.len() / 4;
 		let cap = img_data.capacity() / 4;
 		let bitmap = unsafe { Vec::<u32>::from_raw_parts(ptr, len, cap) };
-		crate::Texture {
+		let texture = crate::Texture {
 			bitmap,
 			width: img.header.width as usize,
 			height: img.header.height as usize,
 			pos: Pos { x: 0, y: 0 },
-		}
+		};
+		debug!(
+			"From file \"{filename}\" created texture: {texture:#?}",
+			filename = img.filename.as_deref().unwrap_or("unknown")
+		);
+		texture
 	}
 }
 

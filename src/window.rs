@@ -7,7 +7,7 @@ use std::{
 	slice, usize,
 };
 
-use log::{debug, error};
+use log::{debug, error, info};
 use windows::{
 	core::PCWSTR,
 	Win32::{
@@ -279,7 +279,9 @@ unsafe extern "system" fn main_window_callback(
 			SetWindowLongPtrW(window_handle, GWLP_USERDATA, window_data_ptr);
 		}
 		WM_SIZE => {
-			/*
+			// Commenting this out gives us a stable "virtual dimensions", meaning, when the window
+			// is resized, everything will be stretched.
+			// /*
 			debug!("WM_SIZE");
 
 			let (width, height) = match window_dimensions(window_handle) {
@@ -295,7 +297,7 @@ unsafe extern "system" fn main_window_callback(
 			if let Err(err) = resize_dib_section(bitmap_data, width, height) {
 				error!("resize_dib_section: {err}");
 			}
-			*/
+			// */
 		}
 		WM_DESTROY => {
 			debug!("WM_DESTROY");
